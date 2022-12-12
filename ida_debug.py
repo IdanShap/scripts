@@ -137,8 +137,10 @@ def ida_debugging():
     sys("pdp debug set all all > /dev/null")
     sys("pep debug set all all > /dev/null")
     if isVPN:
-        sys("vpn debug trunc > /dev/null")
+        sys("vpn debug trunc ALL=5 > /dev/null")
+        sys("ike debug trunc ALL=5 > /dev/null")
         sys("vpn debug on > /dev/null")
+        sys("ike debug on > /dev/null")
         sys("vpn debug on TDERROR_ALL_ALL=5 > /dev/null")
         sys("tail -f $FWDIR/log/vpnd.elg > " + dir + " &")
 
@@ -147,8 +149,13 @@ def ida_debugging():
 
     sys("pdp debug unset all all > /dev/null")
     sys("pep debug unset all all > /dev/null")
-    sys("cp $FWDIR/log/pdpd.elg* " + dir)
-    sys("cp $FWDIR/log/pepd.elg* " + dir)
+    sys("cp $FWDIR/log/pdpd* " + dir)
+    sys("cp $FWDIR/log/pepd* " + dir)
+    if isVPN:
+        sys("vpnd debug off")
+        sys("ike debug off")
+        sys("cp $FWDIR/log/ike* " + dir)
+        sys("cp $FWDIR/log/vpn* " + dir)
     sys("fw debug fwd on PDP_LOG_SIZE=10000000")
     sys("fw debug fwd on PDP_NUM_LOGS=10")
     sys("fw debug fwd on PEP_LOG_SIZE=10000000")
