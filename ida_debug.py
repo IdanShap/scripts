@@ -152,7 +152,7 @@ def ida_debugging():
     sys("cp $FWDIR/log/pdpd* " + dir)
     sys("cp $FWDIR/log/pepd* " + dir)
     if isVPN:
-        sys("vpnd debug off")
+        sys("vpn debug off")
         sys("ike debug off")
         sys("cp $FWDIR/log/ike* " + dir)
         sys("cp $FWDIR/log/vpn* " + dir)
