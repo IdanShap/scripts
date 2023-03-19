@@ -101,7 +101,7 @@ def adConnectivity():
     userName = raw_input("\nEnter the name of the user from the AU : ")
     userPassword = getpass()
 
-    sys("test_ad_connectivity -v -o tested_ad.txt -d " + domainName + " -i " + dcIP + " -u " + userName + " -c" + userPassword + " &")
+    sys("test_ad_connectivity -v -o tested_ad.txt -d " + domainName + " -i " + dcIP + " -u " + userName + " -c '" + userPassword + "' &")
     #sys("cp $FWDIR/tmp/tested_ad.txt " + dir)
     #print "The file saved at " + dir + "tested_ad.txt"
 
