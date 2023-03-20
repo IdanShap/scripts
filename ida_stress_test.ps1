@@ -9,7 +9,19 @@ if (-not (Get-Module -Name 'ActiveDirectory')) {
     Import-Module ActiveDirectory
 }
 
-# Set the number of users to create
+# Determine the highest existing user number
+$existingUsers = Get-ADUser -Filter "SamAccountName -like 'user*'" -Properties SamAccountName | Select-Object -ExpandProperty SamAccountName
+$highestUserNumber = 0
+foreach ($user in $existingUsers) {
+    if ($user -match 'user(\d+)') {
+        $userNumber = [int]$matches[1]
+        if ($userNumber -gt $highestUserNumber) {
+            $highestUserNumber = $userNumber
+        }
+    }
+}
+
+# Set the number of additional users to create
 $numberOfUsers = X
 
 # Set the password for all users
@@ -18,8 +30,8 @@ $password = ConvertTo-SecureString "Zubur1!" -AsPlainText -Force
 # Set the target OU for user creation
 $targetOU = "OU=Users,DC=yourdomain,DC=com" # Replace 'yourdomain' and 'com' with your domain information
 
-# Create users
-for ($i = 1; $i -le $numberOfUsers; $i++) {
+# Create additional users
+for ($i = $highestUserNumber + 1; $i -le $highestUserNumber + $numberOfUsers; $i++) {
     $userName = "user$i"
     $userPrincipalName = "$userName@yourdomain.com" # Replace 'yourdomain.com' with your domain information
 
@@ -33,35 +45,22 @@ for ($i = 1; $i -le $numberOfUsers; $i++) {
         -PasswordNeverExpires $true
 }
 
-Write-Output "Successfully created $numberOfUsers users with the naming format user1 up to user$numberOfUsers."
+Write-Output "Successfully created $numberOfUsers additional users with the naming format user$($highestUserNumber + 1) up to user$($highestUserNumber + $numberOfUsers)."
 
-$proceed = Read-Host "Do you want to generate Logon events (ID 4624) for the created users? (yes/no)"
+$proceed = Read-Host "Do you want to generate Logon events (ID 4624) for all the users? (yes/no)"
 if ($proceed -eq "yes") {
-    for ($i = 1; $i -le $numberOfUsers; $i++) {
-        $userName = "user$i"
+    # Get all user accounts
+    $allUsers = Get-ADUser -Filter "SamAccountName -like 'user*'" -Properties SamAccountName | Select-Object -ExpandProperty SamAccountName
+
+    foreach ($userName in $allUsers) {
         $userPrincipalName = "$userName@yourdomain.com" # Replace 'yourdomain.com' with your domain information
 
-        # Run this command on the local computer to simulate a logon event (Event ID 4624) for each user
-        $command = @"
-$logonSuccess = @"
-        [System.Diagnostics.Eventing.Reader.EventLogRecord]@{
-            Id=4624;
-            LogName='Security';
-            MachineName='$env:COMPUTERNAME';
-            TimeCreated=[datetime]::Now;
-            UserId=[System.Security.Principal.SecurityIdentifier]::new('S-1-5-21-1234567890-1234567890-1234567890-1001');
-            Properties=@(
-                [System.Diagnostics.Eventing.Reader.EventProperty]@{Value='$userName'};
-                [System.Diagnostics.Eventing.Reader.EventProperty]@{Value='$userPrincipalName'};
-            );
-        "@
+        # Generate a logon event (Event ID 4624) for each user
+        $credential = New-Object System.Management.Automation.PSCredential -ArgumentList @($userPrincipalName, $password)
+        $secPassword = $credential.Password
+        $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPassword))
 
-Add-Type -TypeDefinition $logonSuccess -Language CSharp
-
-[void][System.Diagnostics.Eventing.Reader.EventLogRecord]::new()
-"@
-        Invoke-Expression -Command $command
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"& {Start-Sleep -Seconds 1; Exit}`"" -Credential $credential -WindowStyle Hidden
     }
 
-    Write-Output "Successfully generated Logon events (ID 4624) for the created users."
-}
+    Write-Output "Successfully generated Logon events (ID 4624) for all the users."
