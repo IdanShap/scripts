@@ -49,6 +49,10 @@ Write-Output "Generating the users - please wait"
 for ($i = $highestUserNumber + 1; $i -le $highestUserNumber + $numberOfUsers; $i++) {
     $userName = "user$i"
     $userPrincipalName = "$userName@$domainName"
+	
+	# Set the user's home directory and profile path for Remote Desktop
+    $homeDirectory = "\\$domainName\users\home\$userName"
+    $profilePath = "\\$domainName\users\profiles\$userName"
 
     $newUser = New-ADUser -Name $userName `
         -SamAccountName $userName `
@@ -58,10 +62,16 @@ for ($i = $highestUserNumber + 1; $i -le $highestUserNumber + $numberOfUsers; $i
         -Path $targetOU `
         -ChangePasswordAtLogon $false `
         -PasswordNeverExpires $true `
+        -CannotChangePassword $true `
+		-ProfilePath "\DC1\c$\profiles\$userName" `
+		-HomeDrive "H" `
+		-HomeDirectory "\DC1\c$\home\$userName"`
         -PassThru
 
     # Add the user to the "StressTestAdmins" group
     Add-ADGroupMember -Identity "StressTestAdmins" -Members $newUser
+	Add-ADGroupMember -Identity "Remote Desktop Users" -Members $newUser
+	
 	
 	#for debug purpose:
 	echo "username " + $userName
@@ -104,6 +114,9 @@ $proceed = Read-Host "Do you want to generate Logon events (ID 4624) for all the
 if ($proceed -eq "yes") {
     # Get all user accounts
     $allUsers = Get-ADUser -Filter "SamAccountName -like 'user*'" -Properties SamAccountName | Select-Object -ExpandProperty SamAccountName
+	
+	# get plain password
+	$plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
 
     foreach ($userName in $allUsers) {
         $userPrincipalName = "$userName@$domainName"
@@ -120,7 +133,7 @@ if ($proceed -eq "yes") {
             # Access the network share
             try {
                 $netUseResult = net use * /delete /y
-                $netUseResult = net use \\$envComputerName\c$ /user:$userPrincipalName $password
+                $netUseResult = net use \\$envComputerName\c$ /user:`'$userPrincipalName`' `'$plainPassword`'
                 $netUseResult = net use * /delete /y
             } catch {
                 Write-Error "Failed to access the network share for user ${userName}: $_"
@@ -147,7 +160,8 @@ if ($deleteAll -eq "yes") {
 	Write-Output "Successfully deleted all users within the Stress Test OU."
 
 	# Remove "StressTestAdmins" group from the "Remote Management Users" local group
-	Remove-ADGroupMember -Identity "Remote Management Users" -Members "StressTestAdmins"
+	Remove-ADGroupMember -Identity "Remote Management Users" -Members "StressTestAdmins" -Confirm:$false
+	
 
 	# Delete the "StressTestAdmins" group
 	Write-Output "Deleting the StressTestAdmins group..."
