@@ -111,6 +111,7 @@ Write-Output "Disabling the Windows Firewall..."
 Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
 Write-Output "Successfully disabled the Windows Firewall."
 
+# Prompt to generate logon events
 $proceed = Read-Host "Do you want to generate Logon events (ID 4624) for all the users? (yes/no)"
 if ($proceed -eq "yes") {
     # Get all user accounts
@@ -119,34 +120,57 @@ if ($proceed -eq "yes") {
     # Get the plain password from the secure string
     $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
 
+    # Define the maximum number of concurrent tasks
+    $maxConcurrentTasks = 100
+
+    # Create an array to store the tasks
+    $tasks = @()
+
+    # Loop through the users and create a task for each one
     foreach ($userName in $allUsers) {
         $userPrincipalName = "$userName@$domainName"
 
-        # Generate a logon event (Event ID 4624) for each user
-        $credential = New-Object System.Management.Automation.PSCredential -ArgumentList @($userName, $password)
+        $scriptBlock = {
+            param($envComputerName, $userName, $userPrincipalName, $password)
 
-    $scriptBlock = {
-        param($envComputerName, $userName, $userPrincipalName, $password)
+            # Sleep for a random number of seconds
+            Start-Sleep -Seconds (Get-Random -Minimum 1 -Maximum 5)
 
-        # Sleep for a random number of seconds
-        Start-Sleep -Seconds (Get-Random -Minimum 1 -Maximum 5)
+            # Access the network share
+            try {
+                $sharePath = "\\$envComputerName\c$"
+                $credentials = New-Object System.Management.Automation.PSCredential -ArgumentList @($userPrincipalName, (ConvertTo-SecureString $password -AsPlainText -Force))
+                $accessResult = Test-Path -Path $sharePath -Credential $credentials
+            } catch {
+                Write-Error "Failed to access the network share for user ${userName}: $_"
+            }
+        }
 
-        # Access the network share
-        try {
-            $sharePath = "\\$envComputerName\c$"
-            $credentials = New-Object System.Management.Automation.PSCredential -ArgumentList @($userPrincipalName, (ConvertTo-SecureString $password -AsPlainText -Force))
-            $accessResult = Test-Path -Path $sharePath -Credential $credentials
-        } catch {
-            Write-Error "Failed to access the network share for user ${userName}: $_"
+        # Create a new task and add it to the array
+        $task = {
+            Invoke-Command -ComputerName $env:COMPUTERNAME -ScriptBlock $scriptBlock -ArgumentList $env:COMPUTERNAME, $userName, $userPrincipalName, $password -Credential $credentials
+        }
+        $tasks += $task
+
+        # Start the task if the maximum number of concurrent tasks has been reached
+        if ($tasks.Count -eq $maxConcurrentTasks) {
+            Write-Output "Starting $maxConcurrentTasks concurrent tasks..."
+            $taskResults = Invoke-TaskParallel $tasks
+            Write-Output "Finished $maxConcurrentTasks concurrent tasks."
+            $tasks = @()
         }
     }
 
-
-        Invoke-Command -ComputerName $env:COMPUTERNAME -ScriptBlock $scriptBlock -ArgumentList $env:COMPUTERNAME, $userName, $userPrincipalName, $password -Credential $credential
+    # Start any remaining tasks
+    if ($tasks.Count -gt 0) {
+        Write-Output "Starting $($tasks.Count) concurrent tasks..."
+        $taskResults = Invoke-TaskParallel $tasks
+        Write-Output "Finished $($tasks.Count) concurrent tasks."
     }
 
     Write-Output "Successfully generated Logon events (ID 4624) for all the users."
 }
+
 
 # Prompt to delete the users and the OU
 $deleteAll = Read-Host "Do you want to delete all the created users and the Stress Test OU? (yes/no)"
