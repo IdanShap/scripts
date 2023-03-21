@@ -47,6 +47,7 @@ New-ADGroup -Name "StressTestAdmins" -GroupScope Global -Path $targetOU -Descrip
 
 # Loop to create the specified number of users and add them to the appropriate groups
 Write-Output "Generating the users - please wait"
+
 for ($i = $highestUserNumber + 1; $i -le $highestUserNumber + $numberOfUsers; $i++) {
     $userName = "user$i"
     $userPrincipalName = "$userName@$domainName"
@@ -109,6 +110,7 @@ Write-Output "Successfully updated the LocalAccountTokenFilterPolicy registry se
 Write-Output "Disabling the Windows Firewall..."
 Set-NetFirewallProfile -Profile Domain,Public,Private -Enabled False
 Write-Output "Successfully disabled the Windows Firewall."
+
 $proceed = Read-Host "Do you want to generate Logon events (ID 4624) for all the users? (yes/no)"
 if ($proceed -eq "yes") {
     # Get all user accounts
@@ -164,62 +166,8 @@ if ($deleteAll -eq "yes") {
     # Delete the "Stress Test" OU
     Remove-ADOrganizationalUnit -Identity $targetOU -Confirm:$false
     Write-Output "Successfully deleted the Stress Test OU."
-}$proceed = Read-Host "Do you want to generate Logon events (ID 4624) for all the users? (yes/no)"
-if ($proceed -eq "yes") {
-    # Get all user accounts
-    $allUsers = Get-ADUser -Filter "SamAccountName -like 'user*'" -Properties SamAccountName | Select-Object -ExpandProperty SamAccountName
-
-    # Get the plain password from the secure string
-    $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
-
-    foreach ($userName in $allUsers) {
-        $userPrincipalName = "$userName@$domainName"
-
-        # Generate a logon event (Event ID 4624) for each user
-        $credential = New-Object System.Management.Automation.PSCredential -ArgumentList @($userName, $password)
-
-        $scriptBlock = {
-            param($envComputerName, $userName, $userPrincipalName, $password)
-
-            # Sleep for a random number of seconds
-            Start-Sleep -Seconds (Get-Random -Minimum 1 -Maximum 5)
-
-            # Access the network share
-            try {
-                $netUseResult = net use * /delete /y
-                $netUseResult = net use \\$envComputerName\c$ /user:`'$userName`' `'$password`'
-                $netUseResult = net use * /delete /y
-            } catch {
-                Write-Error "Failed to access the network share for user ${userName}: $_"
-            }
-        }
-
-        Invoke-Command -ComputerName $env:COMPUTERNAME -ScriptBlock $scriptBlock -ArgumentList $env:COMPUTERNAME, $userName, $userPrincipalName, $password -Credential $credential
-    }
-
-    Write-Output "Successfully generated Logon events (ID 4624) for all the users."
 }
 
-# Prompt to delete the users and the OU
-$deleteAll = Read-Host "Do you want to delete all the created users and the Stress Test OU? (yes/no)"
-if ($deleteAll -eq "yes") {
-    # Delete all users within the "Stress Test" OU
-    Write-Output "Deleting all users within the Stress Test OU..."
-    Get-ADUser -Filter * -SearchBase $targetOU | Remove-ADUser -Confirm:$false
-    Write-Output "Successfully deleted all users within the Stress Test OU."
-
-    # Remove "StressTestAdmins" group from the "Remote Management Users" local group
-    Remove-ADGroupMember -Identity "Remote Management Users" -Members "StressTestAdmins" -Confirm:$false
-
-    # Delete the "StressTestAdmins" group
-    Write-Output "Deleting the StressTestAdmins group..."
-    Get-ADGroup -Filter {Name -eq 'StressTestAdmins'} | Remove-ADGroup -Confirm:$false
-    Write-Output "Successfully deleted the StressTestAdmins group."
-
-    # Delete the "Stress Test" OU
-    Remove-ADOrganizationalUnit -Identity $targetOU -Confirm:$false
-    Write-Output "Successfully deleted the Stress Test OU."
-}
 # Revert the LocalAccountTokenFilterPolicy registry setting
 Write-Output "Reverting the LocalAccountTokenFilterPolicy registry setting..."
 $regPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
