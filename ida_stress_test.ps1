@@ -122,7 +122,7 @@ if ($proceed -eq "yes") {
         $userPrincipalName = "$userName@$domainName"
 
         # Generate a logon event (Event ID 4624) for each user
-        $credential = New-Object System.Management.Automation.PSCredential -ArgumentList @($userPrincipalName, $password)
+        $credential = New-Object System.Management.Automation.PSCredential -ArgumentList @($userName, $password)
 
         $scriptBlock = {
             param($envComputerName, $userName, $userPrincipalName, $password)
@@ -133,7 +133,7 @@ if ($proceed -eq "yes") {
             # Access the network share
             try {
                 $netUseResult = net use * /delete /y
-                $netUseResult = net use \\$envComputerName\c$ /user:`'$userPrincipalName`' `'$plainPassword`'
+                $netUseResult = net use \\$envComputerName\c$ /user:`'$userName`' `'$password`'
                 $netUseResult = net use * /delete /y
             } catch {
                 Write-Error "Failed to access the network share for user ${userName}: $_"
