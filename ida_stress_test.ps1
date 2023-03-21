@@ -147,10 +147,6 @@ if ($proceed -eq "yes") {
 }
 
 
-if ($proceed -eq "yes") {   
-    Write-Output "Successfully generated Logon events (ID 4624) for all the users."
-}
-
 # Prompt to delete the users and the OU
 $deleteAll = Read-Host "Do you want to delete all the created users and the Stress Test OU? (yes/no)"
 if ($deleteAll -eq "yes") {
