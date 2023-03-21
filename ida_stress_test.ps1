@@ -125,21 +125,22 @@ if ($proceed -eq "yes") {
         # Generate a logon event (Event ID 4624) for each user
         $credential = New-Object System.Management.Automation.PSCredential -ArgumentList @($userName, $password)
 
-        $scriptBlock = {
-            param($envComputerName, $userName, $userPrincipalName, $password)
+    $scriptBlock = {
+        param($envComputerName, $userName, $userPrincipalName, $password)
 
-            # Sleep for a random number of seconds
-            Start-Sleep -Seconds (Get-Random -Minimum 1 -Maximum 5)
+        # Sleep for a random number of seconds
+        Start-Sleep -Seconds (Get-Random -Minimum 1 -Maximum 5)
 
-            # Access the network share
-            try {
-                $netUseResult = net use * /delete /y
-                $netUseResult = net use \\$envComputerName\c$ /user:`'$userName`' `'$password`'
-                $netUseResult = net use * /delete /y
-            } catch {
-                Write-Error "Failed to access the network share for user ${userName}: $_"
-            }
+        # Access the network share
+        try {
+            $sharePath = "\\$envComputerName\c$"
+            $credentials = New-Object System.Management.Automation.PSCredential -ArgumentList @($userPrincipalName, (ConvertTo-SecureString $password -AsPlainText -Force))
+            $accessResult = Test-Path -Path $sharePath -Credential $credentials
+        } catch {
+            Write-Error "Failed to access the network share for user ${userName}: $_"
         }
+    }
+
 
         Invoke-Command -ComputerName $env:COMPUTERNAME -ScriptBlock $scriptBlock -ArgumentList $env:COMPUTERNAME, $userName, $userPrincipalName, $password -Credential $credential
     }
