@@ -9,6 +9,10 @@ if (-not (Get-Module -Name 'ActiveDirectory')) {
     Import-Module ActiveDirectory
 }
 
+# Prompt for domain name
+$domainName = Read-Host "Please enter your domain name (e.g., yourdomain.com)"
+$domainPath = "DC=" + ($domainName -replace '\.', ',DC=')
+
 # Determine the highest existing user number
 $existingUsers = Get-ADUser -Filter "SamAccountName -like 'user*'" -Properties SamAccountName | Select-Object -ExpandProperty SamAccountName
 $highestUserNumber = 0
@@ -21,19 +25,21 @@ foreach ($user in $existingUsers) {
     }
 }
 
-# Set the number of additional users to create
-$numberOfUsers = X
+# Prompt for the number of additional users to create
+$numberOfUsers = Read-Host "Enter the number of users you want to create"
 
 # Set the password for all users
 $password = ConvertTo-SecureString "Zubur1!" -AsPlainText -Force
 
-# Set the target OU for user creation
-$targetOU = "OU=Users,DC=yourdomain,DC=com" # Replace 'yourdomain' and 'com' with your domain information
+# Create the Stress Test OU
+New-ADOrganizationalUnit -Name "Stress Test" -Path $domainPath
+
+$targetOU = "OU=Stress Test,$domainPath"
 
 # Create additional users
 for ($i = $highestUserNumber + 1; $i -le $highestUserNumber + $numberOfUsers; $i++) {
     $userName = "user$i"
-    $userPrincipalName = "$userName@yourdomain.com" # Replace 'yourdomain.com' with your domain information
+    $userPrincipalName = "$userName@$domainName"
 
     New-ADUser -Name $userName `
         -SamAccountName $userName `
@@ -52,15 +58,17 @@ if ($proceed -eq "yes") {
     # Get all user accounts
     $allUsers = Get-ADUser -Filter "SamAccountName -like 'user*'" -Properties SamAccountName | Select-Object -ExpandProperty SamAccountName
 
-    foreach ($userName in $allUsers) {
-        $userPrincipalName = "$userName@yourdomain.com" # Replace 'yourdomain.com' with your domain information
+        foreach ($userName in $allUsers) {
+        $userPrincipalName = "$userName@$domainName" 
 
         # Generate a logon event (Event ID 4624) for each user
         $credential = New-Object System.Management.Automation.PSCredential -ArgumentList @($userPrincipalName, $password)
         $secPassword = $credential.Password
         $plainPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPassword))
 
-        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"& {Start-Sleep -Seconds 1; Exit}`"" -Credential $credential -WindowStyle Hidden
+        Start-Process -FilePath "powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy Bypass -Command `"& {Start-Sleep -Seconds (Get-Random -Minimum 1 -Maximum 5); net use * /delete /y > $null; net use \\\\$env:COMPUTERNAME\\c$ /user:$userPrincipalName '$plainPassword'; net use * /delete /y > $null;}`""
     }
 
     Write-Output "Successfully generated Logon events (ID 4624) for all the users."
+}
+
